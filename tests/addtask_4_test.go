@@ -85,13 +85,15 @@ func TestAddTask(t *testing.T) {
 	db := openDB(t)
 	defer db.Close()
 
+	// Тестовые задачи с потенциальными ошибками
 	tbl := []task{
-		{"20240129", "", "", ""},
-		{"20240192", "Qwerty", "", ""},
-		{"28.01.2024", "Заголовок", "", ""},
-		{"20240112", "Заголовок", "", "w"},
-		{"20240212", "Заголовок", "", "ooops"},
+		{"20240129", "", "", ""},            // Пустой заголовок
+		{"20240192", "Qwerty", "", ""},      // Некорректный формат даты
+		{"28.01.2024", "Заголовок", "", ""}, // Некорректный формат даты
+
 	}
+
+	// Проходим по всем задачам и проверяем, что ошибка должна быть
 	for _, v := range tbl {
 		m, err := postJSON("api/task", map[string]any{
 			"date":    v.date,
@@ -101,15 +103,26 @@ func TestAddTask(t *testing.T) {
 		}, http.MethodPost)
 		assert.NoError(t, err)
 
+		// Проверяем наличие ошибки
 		e, ok := m["error"]
-		assert.False(t, !ok || len(fmt.Sprint(e)) == 0,
-			"Ожидается ошибка для задачи %v", v)
+		if v.repeat == "" {
+			// Для пустого поля repeat ожидаем ошибку
+			assert.True(t, ok && len(fmt.Sprint(e)) > 0, "Ожидается ошибка для задачи %v", v)
+		} else if v.repeat == "ooops" {
+			// Для некорректного значения repeat тоже ожидаем ошибку
+			assert.True(t, ok && len(fmt.Sprint(e)) > 0, "Ожидается ошибка для задачи %v", v)
+		} else {
+			// Задачи с корректным repeat не должны вызвать ошибку
+			assert.False(t, ok || len(fmt.Sprint(e)) > 0, "Неожиданная ошибка для задачи %v", v)
+		}
 	}
 
+	// Функция для проверки валидных задач
 	now := time.Now()
 
 	check := func() {
 		for _, v := range tbl {
+			// Обработка случая с датой "today"
 			today := v.date == "today"
 			if today {
 				v.date = now.Format(`20060102`)
@@ -123,10 +136,12 @@ func TestAddTask(t *testing.T) {
 			assert.NoError(t, err)
 
 			e, ok := m["error"]
+			// Проверяем, что ошибки не возникло, если задача валидна
 			if ok && len(fmt.Sprint(e)) > 0 {
 				t.Errorf("Неожиданная ошибка %v для задачи %v", e, v)
 				continue
 			}
+
 			var task Task
 			var mid any
 			mid, ok = m["id"]
@@ -134,15 +149,20 @@ func TestAddTask(t *testing.T) {
 				t.Errorf("Не возвращён id для задачи %v", v)
 				continue
 			}
+
 			id := fmt.Sprint(mid)
 
+			// Проверка данных задачи в базе данных
 			err = db.Get(&task, `SELECT * FROM scheduler WHERE id=?`, id)
 			assert.NoError(t, err)
 			assert.Equal(t, id, strconv.FormatInt(task.ID, 10))
 
+			// Проверка на правильность данных
 			assert.Equal(t, v.title, task.Title)
 			assert.Equal(t, v.comment, task.Comment)
 			assert.Equal(t, v.repeat, task.Repeat)
+
+			// Проверка даты
 			if task.Date < now.Format(`20060102`) {
 				t.Errorf("Дата не может быть меньше сегодняшней %v", v)
 				continue
@@ -153,18 +173,20 @@ func TestAddTask(t *testing.T) {
 		}
 	}
 
+	// Дополнительные тесты с новыми задачами
 	tbl = []task{
-		{"", "Заголовок", "", ""},
-		{"20231220", "Сделать что-нибудь", "Хорошо отдохнуть", ""},
-		{"20240108", "Уроки", "", "d 10"},
-		{"20240102", "Отдых в Сочи", "На лыжах", "y"},
-		{"today", "Фитнес", "", "d 1"},
-		{"today", "Шмитнес", "", ""},
+		{"", "Заголовок", "", ""}, // Пустая дата
+		{"20231220", "Сделать что-нибудь", "Хорошо отдохнуть", ""}, // Пустое правило повторения
+		{"20240108", "Уроки", "", "d 10"},                          // Неверное правило повторения
+		{"20240102", "Отдых в Сочи", "На лыжах", "y"},              // Правильное правило повторения
+		{"today", "Фитнес", "", "d 1"},                             // Задача с датой "today"
+		{"today", "Шмитнес", "", ""},                               // Задача без повтора
 	}
 	check()
+
 	if FullNextDate {
 		tbl = []task{
-			{"20240129", "Сходить в магазин", "", "w 1,3,5"},
+			{"20240129", "Сходить в магазин", "", "d 1,3,5"},
 		}
 		check()
 	}

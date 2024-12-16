@@ -28,16 +28,17 @@ func TestTask(t *testing.T) {
 
 	body, err := requestJSON("api/task", nil, http.MethodGet)
 	assert.NoError(t, err)
+
 	var m map[string]string
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 
 	e, ok := m["error"]
-	assert.False(t, !ok || len(fmt.Sprint(e)) == 0,
-		"Ожидается ошибка для вызова /api/task")
+	assert.False(t, !ok || len(fmt.Sprint(e)) == 0, "Ожидается ошибка для вызова /api/task")
 
 	body, err = requestJSON("api/task?id="+todo, nil, http.MethodGet)
 	assert.NoError(t, err)
+
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 
@@ -54,6 +55,7 @@ type fulltask struct {
 }
 
 func TestEditTask(t *testing.T) {
+
 	db := openDB(t)
 	defer db.Close()
 
@@ -77,6 +79,7 @@ func TestEditTask(t *testing.T) {
 		{id, task{"28.01.2024", "Заголовок", "", ""}},
 		{id, task{"20240212", "Заголовок", "", "ooops"}},
 	}
+
 	for _, v := range tbl {
 		m, err := postJSON("api/task", map[string]any{
 			"id":      v.id,
@@ -116,6 +119,7 @@ func TestEditTask(t *testing.T) {
 		}
 		assert.Equal(t, newVals["comment"], task.Comment)
 		assert.Equal(t, newVals["repeat"], task.Repeat)
+
 		now := time.Now().Format(`20060102`)
 		if task.Date < now {
 			t.Errorf("Дата не может быть меньше сегодняшней")

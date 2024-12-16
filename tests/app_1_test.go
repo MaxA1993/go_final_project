@@ -14,7 +14,7 @@ import (
 )
 
 func getURL(path string) string {
-	port := Port
+	port := 7540
 	envPort := os.Getenv("TODO_PORT")
 	if len(envPort) > 0 {
 		if eport, err := strconv.ParseInt(envPort, 10, 32); err == nil {
@@ -68,5 +68,5 @@ func TestApp(t *testing.T) {
 		assert.Equal(t, len(fbody), len(body), `сервер возвращает для %s данные другого размера`, fname)
 		return nil
 	}
-	assert.NoError(t, walkDir("../web", cmp))
+	assert.NoError(t, walkDir("../web/", cmp))
 }
