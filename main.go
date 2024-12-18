@@ -15,6 +15,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const dateFormat = "20060102"
+
+var db *sql.DB
+
 type Task struct {
 	ID      string `json:"id"`
 	Date    string `json:"date"`
@@ -23,9 +27,9 @@ type Task struct {
 	Repeat  string `json:"repeat"`
 }
 
-func NextDate(now time.Time, date string, repeat string) (string, error) {
+func nextDate(now time.Time, date string, repeat string) (string, error) {
 	// Парсим исходную дату
-	taskDate, err := time.Parse("20060102", date)
+	taskDate, err := time.Parse(dateFormat, date)
 	if err != nil {
 		return "", fmt.Errorf("неверный формат даты: %v", err)
 	}
@@ -99,11 +103,11 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Если дата не указана, берем сегодняшнюю
 	if task.Date == "" {
-		task.Date = time.Now().Format("20060102")
+		task.Date = time.Now().Format(dateFormat)
 	}
 
 	// Проверка правильности формата даты
-	now, err := time.Parse("20060102", time.Now().Format("20060102"))
+	now, err := time.Parse(dateFormat, time.Now().Format(dateFormat))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Ошибка при парсинге текущей даты: %v", err), http.StatusInternalServerError)
 		return
@@ -121,7 +125,7 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 			task.Date = time.Now().Format("20060102") // Задача с датой меньше текущей будет перемещена на сегодня
 		} else {
 			// Если задано правило повторения, используем NextDate для вычисления следующей даты
-			nextDate, err := NextDate(now, task.Date, task.Repeat)
+			nextDate, err := nextDate(now, task.Date, task.Repeat)
 			if err != nil {
 				http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusBadRequest)
 				return
@@ -177,7 +181,7 @@ func nextDateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Вызываем функцию NextDate
-	nextDate, err := NextDate(now, dateStr, repeat)
+	nextDate, err := nextDate(now, dateStr, repeat)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ошибка: %v", err), http.StatusBadRequest)
 		return
@@ -190,6 +194,15 @@ func nextDateHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	// Создаем маршрутизатор chi
 	r := chi.NewRouter()
+
+	// Открываем соединение с базой данных
+	var err error
+	db, err = sql.Open("sqlite3", "./scheduler.db")
+	if err != nil {
+		fmt.Println("Ошибка при подключении к базе данных:", err)
+		return
+	}
+	defer db.Close() // Закрытие базы данных при завершении работы приложения
 
 	// Добавляем middleware
 	r.Use(middleware.Logger)    // Логируем запросы
@@ -413,7 +426,7 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Проверяем формат даты (должен быть YYYYMMDD)
 	if task.Date != "" {
-		_, err := time.Parse("20060102", task.Date)
+		_, err := time.Parse(dateFormat, task.Date)
 		if err != nil {
 			http.Error(w, `{"error": "Неверный формат даты"}`, http.StatusBadRequest)
 			return
@@ -422,7 +435,7 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Проверяем валидность Repeat
 	if task.Repeat != "" {
-		_, err := NextDate(time.Now(), task.Date, task.Repeat)
+		_, err := nextDate(time.Now(), task.Date, task.Repeat)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error": "Неверное правило повторения: %v"}`, err), http.StatusBadRequest)
 			return
@@ -508,7 +521,7 @@ func taskDoneHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Рассчитываем следующую дату для периодической задачи
 		now := time.Now()
-		nextDate, err := NextDate(now, task.Date, task.Repeat)
+		nextDate, err := nextDate(now, task.Date, task.Repeat)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":"Ошибка при расчете следующей даты: %v"}`, err), http.StatusInternalServerError)
 			return
