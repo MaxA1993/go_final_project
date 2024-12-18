@@ -15,7 +15,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const dateFormat = "20060102"
+const (
+	dateFormat = "20060102"
+	limit      = 50
+)
 
 var db *sql.DB
 
@@ -264,14 +267,14 @@ func installDatabase(dbFile string) {
 func createTableAndIndex(db *sql.DB) {
 	// Создаем таблицу scheduler
 	createTableSQL := `
-    CREATE TABLE IF NOT EXISTS scheduler (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        title TEXT NOT NULL,
-        comment TEXT,
-        repeat TEXT
-    );
-    `
+	CREATE TABLE IF NOT EXISTS scheduler (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		date TEXT NOT NULL,
+		title VARCHAR(250) NOT NULL,       
+		comment TEXT,                       
+		repeat VARCHAR(40)                  
+	);`
+
 	_, err := db.Exec(createTableSQL)
 	if err != nil {
 		fmt.Println(err)
@@ -287,9 +290,6 @@ func createTableAndIndex(db *sql.DB) {
 
 // GET-обработчик для получения списка задач
 func getTasksHandler(w http.ResponseWriter, r *http.Request) {
-	// Получаем параметр поиска
-	search := r.FormValue("search")
-	limit := 50 // Максимальное количество задач, которые мы вернем
 
 	// Открываем базу данных
 	db, err := sql.Open("sqlite3", "./scheduler.db")
@@ -302,15 +302,9 @@ func getTasksHandler(w http.ResponseWriter, r *http.Request) {
 	// Формируем SQL-запрос с учетом поиска
 	var query string
 	var args []interface{}
-	if search != "" {
-		// Если есть параметр поиска, ищем по названию или комментарию
-		query = `SELECT id, date, title, comment, repeat FROM scheduler WHERE title LIKE ? OR comment LIKE ? ORDER BY date LIMIT ?`
-		args = []interface{}{"%" + search + "%", "%" + search + "%", limit}
-	} else {
-		// Если параметра поиска нет, просто выбираем задачи, отсортированные по дате
-		query = `SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT ?`
-		args = []interface{}{limit}
-	}
+
+	query = `SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT ?`
+	args = []interface{}{limit}
 
 	// Выполняем запрос
 	rows, err := db.Query(query, args...)
